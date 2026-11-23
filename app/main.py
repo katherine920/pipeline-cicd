@@ -69,21 +69,21 @@ def obtener_pedido(pid):
 
 @app.get("/metrics")
 def metrics():
-    l = []
-    l.append("# TYPE http_requests_total counter")
+    lineas = []
+    lineas.append("# TYPE http_requests_total counter")
     for (m, p, s), v in METRICAS["requests"].items():
-        l.append(f'http_requests_total{{method="{m}",path="{p}",status="{s}"}} {v}')
-    l.append("# TYPE http_errors_total counter")
-    l.append(f"http_errors_total {METRICAS['errors']}")
-    l.append("# TYPE http_request_duration_seconds histogram")
+        lineas.append(f'http_requests_total{{method="{m}",path="{p}",status="{s}"}} {v}')
+    lineas.append("# TYPE http_errors_total counter")
+    lineas.append(f"http_errors_total {METRICAS['errors']}")
+    lineas.append("# TYPE http_request_duration_seconds histogram")
     for b, v in METRICAS["buckets"].items():
         le = "+Inf" if b == float("inf") else b
-        l.append(f'http_request_duration_seconds_bucket{{le="{le}"}} {v}')
-    l.append(f"http_request_duration_seconds_sum {METRICAS['duration_sum']}")
-    l.append(f"http_request_duration_seconds_count {METRICAS['duration_count']}")
-    l.append("# TYPE app_uptime_seconds gauge")
-    l.append(f"app_uptime_seconds {time.time() - INICIO}")
-    return Response("\n".join(l) + "\n", mimetype="text/plain")
+        lineas.append(f'http_request_duration_seconds_bucket{{le="{le}"}} {v}')
+    lineas.append(f"http_request_duration_seconds_sum {METRICAS['duration_sum']}")
+    lineas.append(f"http_request_duration_seconds_count {METRICAS['duration_count']}")
+    lineas.append("# TYPE app_uptime_seconds gauge")
+    lineas.append(f"app_uptime_seconds {time.time() - INICIO}")
+    return Response("\n".join(lineas) + "\n", mimetype="text/plain")
 
 
 if __name__ == "__main__":
