@@ -1,0 +1,13 @@
+services:
+  app:
+    image: ${IMAGE}:${TAG}
+    container_name: tiendarapida-${APP_ENV}
+    ports: ["${APP_PORT}:8000"]
+    restart: always
+    environment:
+      APP_ENV: ${APP_ENV}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 3

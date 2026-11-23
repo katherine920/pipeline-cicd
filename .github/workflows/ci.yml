@@ -1,0 +1,67 @@
+name: CI - Integracion continua y liberacion
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Lint y pruebas unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r app/requirements-dev.txt
+      - run: flake8 app
+      - run: python -m pytest app/tests -v
+
+  build-release:
+    name: Construir imagen y probar en entorno de liberacion
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Variables
+        run: |
+          echo "IMAGE=${REGISTRY}/${IMAGE_NAME,,}" >> $GITHUB_ENV
+          echo "TAG=${GITHUB_SHA::8}" >> $GITHUB_ENV
+      - name: Construir imagen
+        run: docker build -f app/Dockerfile -t $IMAGE:$TAG -t $IMAGE:latest .
+      - name: Levantar entorno de liberacion
+        run: IMAGE=$IMAGE TAG=$TAG ./scripts/env/setup-env.sh
+      - name: Pruebas de humo
+        run: ./scripts/tests/smoke_test.sh http://localhost:8000
+      - name: Pruebas de integracion
+        run: python scripts/tests/integration_test.py http://localhost:8000
+      - name: Pruebas de nivel de servicio (SLO)
+        run: python scripts/tests/slo_check.py http://localhost:8000
+      - name: Logs si falla
+        if: failure()
+        run: docker compose -f scripts/env/docker-compose.release.yml logs
+      - name: Destruir entorno
+        if: always()
+        run: ./scripts/env/teardown-env.sh
+      - name: Login en GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publicar imagen
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker push $IMAGE:$TAG
+          docker push $IMAGE:latest

@@ -1,0 +1,65 @@
+name: CD - Despliegue continuo
+
+on:
+  workflow_run:
+    workflows: ["CI - Integracion continua y liberacion"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de imagen a desplegar (por defecto SHA corto)"
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  deploy-staging:
+    name: Desplegar en staging
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          INPUT_TAG="${{ github.event.inputs.tag }}"
+          echo "tag=${INPUT_TAG:-${SHA::8}}" >> $GITHUB_OUTPUT
+      - name: Desplegar por SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER: ${{ vars.DEPLOY_USER }}
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}
+          TAG: ${{ steps.v.outputs.tag }}
+          APP_ENV: staging
+          APP_PORT: "8000"
+        run: ./scripts/deploy/remote-deploy.sh
+      - name: Pruebas post-despliegue
+        run: |
+          ./scripts/tests/smoke_test.sh "${{ vars.APP_URL }}"
+          python scripts/tests/integration_test.py "${{ vars.APP_URL }}"
+
+  deploy-production:
+    name: Desplegar en produccion (aprobacion manual)
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production   # configurar "Required reviewers" en GitHub
+    steps:
+      - uses: actions/checkout@v4
+      - name: Desplegar por SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER: ${{ vars.DEPLOY_USER }}
+          IMAGE: ${{ env.REGISTRY }}/${{ github.repository }}
+          TAG: ${{ needs.deploy-staging.outputs.tag }}
+          APP_ENV: production
+          APP_PORT: "8080"
+        run: ./scripts/deploy/remote-deploy.sh
+      - name: Verificacion post-despliegue
+        run: ./scripts/tests/smoke_test.sh "${{ vars.APP_URL }}"

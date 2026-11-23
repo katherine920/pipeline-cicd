@@ -1,0 +1,18 @@
+groups:
+  - name: tiendarapida-slo
+    rules:
+      - alert: AppCaida
+        expr: up{job="tiendarapida"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "La aplicacion no responde"}
+      - alert: TasaErroresAlta
+        expr: sum(rate(http_errors_total[5m])) / sum(rate(http_requests_total[5m])) > 0.01
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Tasa de errores 5xx mayor a 1%"}
+      - alert: LatenciaP95Alta
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "Latencia p95 mayor a 500 ms"}

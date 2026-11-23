@@ -1,0 +1,29 @@
+# Entorno de liberacion: app + Prometheus + Grafana
+services:
+  app:
+    image: ${IMAGE:-tiendarapida}:${TAG:-latest}
+    ports: ["8000:8000"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 256M}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ../../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9090:9090"]
+    depends_on: [app]
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - ../../monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
